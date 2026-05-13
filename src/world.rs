@@ -22,10 +22,7 @@ impl World {
         }
     }
 
-    /*
-        None => None
-        Some(taskid) => Some(UnitTask)
-     */
+
     pub fn try_get_task(&self, taskid: Option<&usize>) -> Option<UnitTask> {
         taskid.map( |id| { self.tasks[id] } )
     }

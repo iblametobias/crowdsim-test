@@ -24,6 +24,8 @@ impl Unit {
     }
     
     pub fn compute_update(&self, world: &World) -> UnitUpdateResult {
+        let mut result = UnitUpdateResult::default();
+
         let current_taskid = self.get_current_taskid();
         
         let mut f_separation = Vec2::ZERO;
@@ -56,29 +58,28 @@ impl Unit {
         match world.try_get_task(current_taskid) {
             Some(UnitTask::Walk { destination }) => {
                 let diff = destination - self.position;
-                if diff.length() < TASK_COMPLETION_RANGE { return UnitUpdateResult::TaskCompleted; }
+                if diff.length() < TASK_COMPLETION_RANGE {
+                    result.completed_tasks += 1;
+                }
                 
                 f_task += diff.normalize();
             },
             None => {}
         }
         
-        UnitUpdateResult::Accelerate(
-            (
-                f_separation * WEIGHT_SEPARATION + 
-                f_cohesion * WEIGHT_COHESION + 
-                f_alignment * WEIGHT_ALIGNMENT +
-                f_task * WEIGHT_TASK
-            ).clamp_length_max(1.0) * get_frame_time() * self.stats.acc
-        )
+        result.acceleration = (
+            f_separation * WEIGHT_SEPARATION + 
+            f_cohesion * WEIGHT_COHESION + 
+            f_alignment * WEIGHT_ALIGNMENT +
+            f_task * WEIGHT_TASK
+        ).clamp_length_max(1.0) * get_frame_time() * self.stats.acc;
+        result
     }
     
     pub fn apply_update(&mut self, update: UnitUpdateResult) {
-        match update {
-            UnitUpdateResult::TaskCompleted => { self.tasks.pop_front(); },
-            UnitUpdateResult::Accelerate(acc) => { self.velocity += acc; }
-        }
+        for _ in 0..update.completed_tasks { self.tasks.pop_front(); }
         
+        self.velocity += update.acceleration;
         self.velocity *= 1.0 - self.stats.drag;
         self.velocity = self.velocity.clamp_length_max(self.stats.speed);
         self.position += self.velocity;
@@ -123,7 +124,9 @@ pub enum UnitTask {
     Walk { destination: Vec2 }
 }
 
-pub enum UnitUpdateResult {
-    TaskCompleted,
-    Accelerate(Vec2)
+#[derive(Default)]
+pub struct UnitUpdateResult {
+    completed_tasks: u8,
+    acceleration: Vec2,
 }
+

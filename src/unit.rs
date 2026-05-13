@@ -5,11 +5,17 @@ use macroquad::prelude::*;
 use crate::world::World;
 
 const TASK_COMPLETION_RANGE: f32 = 32.0;
-const WEIGHT_SEPARATION: f32 = 5.0;
-const WEIGHT_COHESION: f32 = 0.5;
-const WEIGHT_ALIGNMENT: f32 = 1.5;
-const WEIGHT_TASK: f32 = 2.0;
 
+const MIN_SEPARATION_DIST: f32 = 0.3;
+
+const WEIGHT_COLLISION: f32 = 0.05;
+
+const WEIGHT_SEPARATION: f32 = 0.6;
+const WEIGHT_COHESION: f32 = 0.9;
+const WEIGHT_ALIGNMENT: f32 = 1.2;
+const WEIGHT_TASK: f32 = 1.6;
+
+#[derive(Debug)]
 pub struct Unit {
     id: usize,
     position: Vec2,
@@ -33,12 +39,25 @@ impl Unit {
         let mut flock_center = Vec2::ZERO;
         let mut flock_direction =  Vec2::ZERO;
         let mut flock_size = 0u32;
+
+        let mut total_stress = 0f32;
+        let mut collisions_sum = Vec2::ZERO;
         
         for (&id, unit) in world.get_units() {
+            if id == self.id { continue; }
             let diff = unit.position - self.position;
-            if diff.length() > self.stats.flocking_range || id == self.id { continue; }
+            let dir = diff.normalize();
+            let dist = diff.length();
+
+            let collision = (unit.stats.radius + self.stats.radius - dist) * 0.5;
+            if collision > 0.0 {
+                collisions_sum += -dir * collision;
+                total_stress += collision;
+            }
+
+            if dist > self.stats.flocking_range { continue; }
             
-            f_separation += -diff / diff.length_squared();
+            f_separation += -dir / (dist - self.stats.radius).min(MIN_SEPARATION_DIST);
             
             if current_taskid == unit.get_current_taskid() && current_taskid.is_some() {
                 flock_size += 1;
@@ -46,6 +65,11 @@ impl Unit {
                 flock_direction += unit.velocity;
             }
         }
+
+        result.collision_push = match total_stress {
+            0.0 => Vec2::ZERO,
+            n => collisions_sum / n * WEIGHT_COLLISION,
+        };
 
         let f_cohesion = match flock_size {
             0 => Vec2::ZERO,
@@ -72,17 +96,22 @@ impl Unit {
             f_cohesion * WEIGHT_COHESION + 
             f_alignment * WEIGHT_ALIGNMENT +
             f_task * WEIGHT_TASK
-        ).clamp_length_max(1.0) * get_frame_time() * self.stats.acc;
+        ).clamp_length_max(1.0) * self.stats.acc;
         result
     }
-    
+
     pub fn apply_update(&mut self, update: UnitUpdateResult) {
         for _ in 0..update.completed_tasks { self.tasks.pop_front(); }
+                
+        let dt = get_frame_time();
         
-        self.velocity += update.acceleration;
-        self.velocity *= 1.0 - self.stats.drag;
+        self.velocity += update.collision_push / dt; // physics, brometheus
+
+        self.velocity += update.acceleration * dt;
+        self.velocity /= 1.0 + self.stats.drag * dt;
         self.velocity = self.velocity.clamp_length_max(self.stats.speed);
-        self.position += self.velocity;
+        self.position += self.velocity * dt;
+
     }
 
     pub fn draw(&self) {
@@ -105,6 +134,7 @@ impl Unit {
     }
 }
 
+#[derive(Debug)]
 struct UnitStats {
     speed: f32,
     acc: f32,
@@ -115,7 +145,7 @@ struct UnitStats {
 
 impl UnitStats {
     const CUNT1: Self = Self {
-        speed: 50.0, acc: 100.0, drag: 0.3, radius: 5.0, flocking_range: 20.0
+        speed: 120.0, acc: 500.0, drag: 6.0, radius: 5.0, flocking_range: 20.0
     };
 }
 
@@ -124,9 +154,10 @@ pub enum UnitTask {
     Walk { destination: Vec2 }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct UnitUpdateResult {
     completed_tasks: u8,
     acceleration: Vec2,
+    collision_push: Vec2,
 }
 

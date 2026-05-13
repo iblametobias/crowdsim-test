@@ -37,16 +37,16 @@ impl World {
     }
 
     pub fn spawn_random_bih(&mut self) {
-        let result = self.units.insert(
+        let None = self.units.insert(
             self.last_unit_id, Unit::new(self.last_unit_id, Vec2 { 
                 x: self.rng.gen_range(0.0, self.size.0 as f32), 
                 y: self.rng.gen_range(0.0, self.size.1 as f32) }
             )
-        );
-
-        if let Some(_) = result {
+        ) else {
             panic!("Unit {} replaced with sum other bih", self.last_unit_id)
-        }
+        };
+ 
+
         self.last_unit_id += 1;
     }
 

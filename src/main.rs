@@ -20,7 +20,7 @@ async fn main() {
     
     loop {
         if world.unit_count() < UNIT_COUNT {
-            world.spawn_random_bih();
+            world.spawn_test_unit();
         }
         if is_key_pressed(KeyCode::Escape) {
             world.detask_units(&all);

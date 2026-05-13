@@ -6,14 +6,14 @@ use crate::world::World;
 
 const TASK_COMPLETION_RANGE: f32 = 32.0;
 
-const MIN_SEPARATION_DIST: f32 = 0.3;
+const MIN_SEPARATION_DIST: f32 = 0.00001;
 
 const WEIGHT_COLLISION: f32 = 0.05;
 
-const WEIGHT_SEPARATION: f32 = 0.6;
-const WEIGHT_COHESION: f32 = 0.9;
-const WEIGHT_ALIGNMENT: f32 = 1.2;
-const WEIGHT_TASK: f32 = 1.6;
+const WEIGHT_SEPARATION: f32 = 5.0;
+const WEIGHT_COHESION: f32 = 1.0;
+const WEIGHT_ALIGNMENT: f32 = 1.0;
+const WEIGHT_TASK: f32 = 0.8;
 
 #[derive(Debug)]
 pub struct Unit {
@@ -25,10 +25,11 @@ pub struct Unit {
 }
 
 impl Unit {
-    pub fn new(id: usize, position: Vec2) -> Self {
-        Self { id, position, velocity: Vec2::ZERO, stats: UnitStats::CUNT1, tasks: VecDeque::new() }
+    pub fn new(id: usize, position: Vec2, stats: UnitStats) -> Self {
+        Self { id, position, velocity: Vec2::ZERO, stats: stats, tasks: VecDeque::new() }
     }
     
+    // DESPERATELY needs to be refactored
     pub fn compute_update(&self, world: &World) -> UnitUpdateResult {
         let mut result = UnitUpdateResult::default();
 
@@ -57,7 +58,7 @@ impl Unit {
 
             if dist > self.stats.flocking_range { continue; }
             
-            f_separation += -dir / (dist - self.stats.radius).min(MIN_SEPARATION_DIST);
+            f_separation += -dir / (dist - self.stats.radius).max(MIN_SEPARATION_DIST);
             
             if current_taskid == unit.get_current_taskid() && current_taskid.is_some() {
                 flock_size += 1;
@@ -135,7 +136,7 @@ impl Unit {
 }
 
 #[derive(Debug)]
-struct UnitStats {
+pub struct UnitStats {
     speed: f32,
     acc: f32,
     drag: f32,
@@ -144,8 +145,8 @@ struct UnitStats {
 }
 
 impl UnitStats {
-    const CUNT1: Self = Self {
-        speed: 120.0, acc: 500.0, drag: 6.0, radius: 5.0, flocking_range: 20.0
+    pub const TEST0: Self = Self {
+        speed: 120.0, acc: 500.0, drag: 6.0, radius: 5.0, flocking_range: 24.0
     };
 }
 

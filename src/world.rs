@@ -1,14 +1,11 @@
-use std::collections::HashMap;
-
 use macroquad::prelude::*;
+use slotmap::SlotMap;
 
 use crate::unit::*;
 
 pub struct World {
-    units: HashMap<usize, Unit>,
-    last_unit_id: usize,
-    pub tasks: HashMap<usize, UnitTask>,
-    last_task_id: usize, 
+    units: SlotMap<UnitID, Unit>,
+    tasks: SlotMap<TaskID, UnitTask>,
     rng: rand::RandGenerator,
     size: (u32, u32),
 }
@@ -16,71 +13,64 @@ pub struct World {
 impl World {
     pub fn new(size: (u32, u32)) -> Self {
         Self {
-            units: HashMap::new(), last_unit_id: 0, 
-            tasks: HashMap::new(), last_task_id: 0,
+            units: SlotMap::with_key(), 
+            tasks: SlotMap::with_key(),
             rng: rand::RandGenerator::new(), size
         }
     }
 
-
-    pub fn try_get_task(&self, taskid: Option<&usize>) -> Option<UnitTask> {
-        taskid.map( |id| { self.tasks[id] } )
-    }
-
-    pub fn get_units(&self) -> &HashMap<usize, Unit> {
+    pub fn get_units(&self) -> &SlotMap<UnitID, Unit> {
         &self.units
     }
 
-    pub fn spawn_unit(&mut self, unit: Unit) {
-        let None = self.units.insert(self.last_unit_id, unit) else {
-            panic!("Unit of id {} aleady exists.", self.last_unit_id);
-        };
-        self.last_unit_id += 1;
+    pub fn spawn_unit(&mut self, unit: Unit) -> UnitID {
+        self.units.insert(unit)
     }
 
-    pub fn spawn_test_unit(&mut self) {
+    pub fn spawn_test_unit(&mut self) -> UnitID {
         let unit = Unit::new(
-            self.last_unit_id, 
             Vec2 { 
             x: self.rng.gen_range(0.0, self.size.0 as f32), 
             y: self.rng.gen_range(0.0, self.size.1 as f32) },
             UnitStats::TEST0
         );
 
-        self.spawn_unit(unit);
+        self.spawn_unit(unit)
     }
 
     pub fn unit_count(&self) -> usize {
         self.units.len()
     }
 
-    pub fn entask_units(&mut self, units: &Vec<usize>, task: UnitTask) {
-        self.tasks.insert(self.last_task_id, task);
-        for id in units {
+    pub fn entask_units(&mut self, units: &[UnitID], task: UnitTask) {
+        let taskid = self.tasks.insert(task);
+        for &id in units {
             if let Some(unit) = self.units.get_mut(id) {
-                unit.add_task(self.last_task_id);
+                unit.add_task(taskid);
             }
         }
-
-        self.last_task_id += 1;
     }
 
-    pub fn detask_units(&mut self, units: &Vec<usize>) {
-        for id in units {
+    pub fn detask_units(&mut self, units: &[UnitID]) {
+        for &id in units {
             if let Some(unit) = self.units.get_mut(id) {
                 unit.clear_tasks();
             }
         }
     }
 
+    pub fn get_task(&self, taskid: TaskID) -> Option<&UnitTask> {
+        self.tasks.get(taskid)
+    }
+
     pub fn update(&mut self) {
-        let update_results: Vec<(usize, UnitUpdateResult)> = self.units.iter()
+        let update_results: Vec<(UnitID, UnitUpdateResult)> = self.units.iter()
             .map(
-                |(&id, unit)| { (id, unit.compute_update(&self)) }
+                |(id, unit)| { (id, unit.compute_update(&self)) }
             ).collect();
 
         for (id, update) in update_results {
-            if let Some(unit) = self.units.get_mut(&id) {
+            if let Some(unit) = self.units.get_mut(id) {
                 unit.apply_update(update);
             }
         }
@@ -96,4 +86,3 @@ impl World {
         }
     }
 }
-

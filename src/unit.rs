@@ -1,6 +1,7 @@
 use std::{collections::VecDeque};
 
 use macroquad::prelude::*;
+use slotmap::new_key_type;
 
 use crate::world::World;
 
@@ -8,25 +9,24 @@ const TASK_COMPLETION_RANGE: f32 = 32.0;
 
 const MIN_SEPARATION_DIST: f32 = 0.00001;
 
-const WEIGHT_COLLISION: f32 = 0.05;
+const WEIGHT_COLLISION: f32 = 0.02;
 
-const WEIGHT_SEPARATION: f32 = 5.0;
+const WEIGHT_SEPARATION: f32 = 4.0;
 const WEIGHT_COHESION: f32 = 1.0;
-const WEIGHT_ALIGNMENT: f32 = 1.0;
+const WEIGHT_ALIGNMENT: f32 = 0.0;
 const WEIGHT_TASK: f32 = 0.8;
 
 #[derive(Debug)]
 pub struct Unit {
-    id: usize,
     position: Vec2,
     velocity: Vec2,
-    tasks: VecDeque<usize>,
+    tasks: VecDeque<TaskID>,
     stats: UnitStats,
 }
 
 impl Unit {
-    pub fn new(id: usize, position: Vec2, stats: UnitStats) -> Self {
-        Self { id, position, velocity: Vec2::ZERO, stats: stats, tasks: VecDeque::new() }
+    pub fn new(position: Vec2, stats: UnitStats) -> Self {
+        Self { position, velocity: Vec2::ZERO, stats: stats, tasks: VecDeque::new() }
     }
     
     // DESPERATELY needs to be refactored
@@ -44,8 +44,8 @@ impl Unit {
         let mut total_stress = 0f32;
         let mut collisions_sum = Vec2::ZERO;
         
-        for (&id, unit) in world.get_units() {
-            if id == self.id { continue; }
+        for (_, unit) in world.get_units() {
+            if unit == self { continue; }
             let diff = unit.position - self.position;
             let dir = diff.normalize();
             let dist = diff.length();
@@ -80,9 +80,9 @@ impl Unit {
 
         let mut f_task = Vec2::ZERO;
         
-        match world.try_get_task(current_taskid) {
+        match current_taskid.and_then( |&taskid| world.get_task(taskid).cloned() ) {
             Some(UnitTask::Walk { destination }) => {
-                let diff = destination - self.position;
+                let diff = destination - self.position; // subtract owned from ref
                 if diff.length() < TASK_COMPLETION_RANGE {
                     result.completed_tasks += 1;
                 }
@@ -97,7 +97,7 @@ impl Unit {
             f_cohesion * WEIGHT_COHESION + 
             f_alignment * WEIGHT_ALIGNMENT +
             f_task * WEIGHT_TASK
-        ).clamp_length_max(1.0) * self.stats.acc;
+        ).normalize_or_zero() * self.stats.acc; 
         result
     }
 
@@ -122,16 +122,23 @@ impl Unit {
         );
     }
 
-    pub fn get_current_taskid(&self) -> Option<&usize> {
+    pub fn get_current_taskid(&self) -> Option<&TaskID> {
         self.tasks.front()
     }
 
-    pub fn add_task(&mut self, taskid: usize) {
+    pub fn add_task(&mut self, taskid: TaskID) {
         self.tasks.push_back(taskid);
     }
 
     pub fn clear_tasks(&mut self) {
         self.tasks.clear();
+    }
+}
+
+// will fix this later
+impl PartialEq for Unit {
+    fn eq(&self, other: &Self) -> bool {
+        self.position == other.position && self.velocity == other.velocity
     }
 }
 
@@ -162,3 +169,5 @@ pub struct UnitUpdateResult {
     collision_push: Vec2,
 }
 
+new_key_type! { pub struct UnitID; }
+new_key_type! { pub struct TaskID; }
